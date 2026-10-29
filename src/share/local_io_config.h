@@ -14,29 +14,21 @@
  * limitations under the License.
  */
 
-#include "observer/virtual_table/ob_all_virtual_files_table.h"
+#pragma once
 
-namespace oceanbase
+namespace oceanbase::share
 {
-using namespace common;
+enum class LocalIOBackend { WORKER, NATIVE_AIO };
 
-namespace observer
+struct LocalIOConfig
 {
+  bool direct_io = false;
+  LocalIOBackend backend = LocalIOBackend::WORKER;
 
-ObAllVirtualFilesTable::ObAllVirtualFilesTable() :
-    ObVirtualTableScannerIterator()
-{
+  int file_flags(int flags) const;
+};
+
+// Return zero or a positive system errno. Only unsupported capabilities fall
+// back; storage, permission and resource errors must fail device initialization.
+int probe_local_io(const char *directory, LocalIOConfig &config);
 }
-
-ObAllVirtualFilesTable::~ObAllVirtualFilesTable()
-{
-}
-
-int ObAllVirtualFilesTable::inner_get_next_row(common::ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(row);
-  return OB_ITER_END;
-}
-} // namespace observer
-} // namespace oceanbase
