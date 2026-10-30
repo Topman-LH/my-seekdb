@@ -27,6 +27,8 @@
 #include "vsag/factory.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/oblog/ob_log.h"
+#include "lib/vector/ob_hipvs_offload.h"
+#include <sstream>
 #include "lib/worker.h"
 
 namespace oceanbase {
@@ -219,6 +221,38 @@ int HnswIndexHandler::build_index(const vsag::DatasetPtr &base)
 {
   int ret = OB_SUCCESS;
   try {
+    // ---- hipVS GPU offload ----------------------------------------------
+    // Build the HNSW base layer on an AMD GPU through the standalone
+    // hipvs_hnsw_worker process and load its snapshot into this index.
+    // Gated by OB_HIPVS_WORKER; every failure falls back to the CPU build.
+    obhipvs_offload::OffloadConfig hipvs_cfg;
+    if (obhipvs_offload::load_config(hipvs_cfg) &&
+        base->GetNumElements() >= static_cast<int64_t>(hipvs_cfg.min_rows)) {
+      std::string snapshot;
+      if (OB_FAIL(obhipvs_offload::gpu_build_snapshot(
+              base->GetFloat32Vectors(),
+              static_cast<uint64_t>(base->GetNumElements()),
+              static_cast<uint64_t>(base->GetDim()),
+              static_cast<uint64_t>(get_max_degree()),
+              static_cast<uint64_t>(get_ef_construction()), hipvs_cfg,
+              snapshot))) {
+        ret = OB_SUCCESS;
+        LOG_WARN("[HIPVS] GPU offload failed, falling back to the CPU build");
+      } else {
+        std::stringstream stream(snapshot);
+        tl::expected<void, Error> loaded = index_->Deserialize(stream);
+        if (loaded.has_value()) {
+          LOG_INFO("[HIPVS] HNSW built by the hipVS GPU worker and loaded "
+                   "from its snapshot", K(base->GetNumElements()), K_(dim));
+          return OB_SUCCESS;
+        }
+        ret = OB_SUCCESS;
+        LOG_WARN("[HIPVS] snapshot rejected by VSAG, falling back to the CPU build",
+                 "vsag_error", loaded.error().type);
+      }
+    }
+    // ---- end hipVS GPU offload ------------------------------------------
+
     tl::expected<std::vector<int64_t>, Error> result = index_->Build(base);
     if (result.has_value()) {
     } else {
