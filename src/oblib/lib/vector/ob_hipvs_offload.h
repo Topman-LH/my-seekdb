@@ -39,9 +39,12 @@
 #include <sys/wait.h>
 
 #include "lib/oblog/ob_log.h"
-// Resolved relative to this file, so no extra include directory is needed:
-// src/oblib/lib/vector -> repo root -> tools/hipvs_hnsw.
-#include "../../../../tools/hipvs_hnsw/snapshot_format.h"
+// Snapshot wire-format header lives INSIDE this package (lib/vector) so it is
+// covered by oblib's Bazel glob (lib/**/*.h) and stays inside the hermetic
+// build sandbox. Do NOT include the tools/hipvs_hnsw copy from here: it is
+// outside the package and breaks Bazel (file-not-found + layering_check).
+// Keep the two copies' 96-byte layout in sync.
+#include "ob_hipvs_snapshot_format.h"
 
 // Framed stdin protocol shared with tools/hipvs_hnsw/hipvs_hnsw_worker.cpp
 // (the worker keeps its own copy inside its translation unit).
